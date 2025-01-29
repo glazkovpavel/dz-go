@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"go/validation-api/configs"
+	"go/validation-api/internal/email"
+	"go/validation-api/internal/files"
 	"go/validation-api/internal/verify"
 	"net/http"
 )
@@ -10,7 +12,8 @@ import (
 func main() {
 	conf := configs.LoadConfig()
 	router := http.NewServeMux()
-	verify.NewVerifierHandler(router, verify.VerifierHandlerDeps{Config: conf})
+	emailsWithDb := email.NewEmailWithDb(files.NewJsonDb("db/data.json"))
+	verify.NewVerifierHandler(router, verify.VerifierHandlerDeps{Config: conf, EmailsWithDb: emailsWithDb})
 
 	server := http.Server{
 		Addr:    ":8081",
