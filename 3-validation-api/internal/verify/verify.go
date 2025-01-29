@@ -1,11 +1,16 @@
 package verify
 
 import (
+	"crypto/tls"
 	"fmt"
+	"github.com/fatih/color"
+	emailPkg "github.com/jordan-wright/email"
 	"go/validation-api/configs"
 	"go/validation-api/internal/email"
 	"go/validation-api/pkg/request"
+	"log"
 	"net/http"
+	"net/smtp"
 )
 
 type VerifierHandlerDeps struct {
@@ -37,7 +42,16 @@ func (handler *VerifierHandler) Send() http.HandlerFunc {
 		fmt.Println(*body)
 
 		newEmail := email.NewEmail(body.Email)
-		handler.AddEmail(*newEmail)
+		err = handler.AddEmail(*newEmail)
+		if err != nil {
+			color.Red(err.Error())
+			return
+		}
+		err = handler.sendEmail(newEmail.Email)
+		if err != nil {
+			color.Red(err.Error())
+			return
+		}
 
 	}
 }
@@ -46,4 +60,72 @@ func (handler *VerifierHandler) Verify() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 
 	}
+}
+
+func (handler *VerifierHandler) sendEmail(userEmail string) error {
+	e := emailPkg.NewEmail()
+	e.From = "glazprom@bk.ru"
+	e.To = []string{userEmail}
+	e.Subject = "Awesome Subject"
+	e.Text = []byte("Text Body is, of course, supported!")
+	e.HTML = []byte("<h1>Fancy HTML is supported, too!</h1>")
+
+	auth := smtp.PlainAuth(
+		"",
+		handler.Config.EmailConf.Address,
+		handler.Config.EmailConf.Password,
+		"smtp.mail.ru",
+	)
+
+	// Настройка TLS соединения
+	tlsConfig := &tls.Config{
+		ServerName: "smtp.mail.ru",
+	}
+
+	conn, err := tls.Dial("tcp", "smtp.mail.ru:465", tlsConfig)
+	if err != nil {
+		log.Fatalf("Ошибка при подключении к SMTP-серверу: %v", err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, "smtp.mail.ru")
+	if err != nil {
+		log.Fatalf("Ошибка при создании SMTP-клиента: %v", err)
+	}
+	defer client.Quit()
+
+	if err = client.Auth(auth); err != nil {
+		log.Fatalf("Ошибка при аутентификации: %v", err)
+	}
+
+	if err = client.Mail(e.From); err != nil {
+		log.Fatalf("Ошибка при установке отправителя: %v", err)
+	}
+
+	for _, addr := range e.To {
+		if err = client.Rcpt(addr); err != nil {
+			log.Fatalf("Ошибка при добавлении получателя: %v", err)
+		}
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		log.Fatalf("Ошибка при подготовке к передаче данных: %v", err)
+	}
+	defer w.Close()
+
+	bytes, err := e.Bytes()
+	if err != nil {
+		log.Fatalf("Ошибка при получении байтов письма: %v", err)
+	}
+
+	_, err = w.Write(bytes)
+	if err != nil {
+		log.Fatalf("Ошибка при отправке письма: %v", err)
+	}
+
+	client.Quit()
+
+	log.Println("Письмо успешно отправлено.")
+	return nil
 }

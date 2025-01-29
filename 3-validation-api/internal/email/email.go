@@ -67,9 +67,13 @@ func NewEmailWithDb(db Db) *EmailsWithDb {
 	}
 }
 
-func (emails *EmailsWithDb) AddEmail(email EmailSt) {
+func (emails *EmailsWithDb) AddEmail(email EmailSt) error {
 	emails.Emails = append(emails.Emails, email)
-	emails.save()
+	err := emails.save()
+	if err != nil {
+		return err
+	}
+	return nil
 
 }
 
@@ -78,11 +82,13 @@ func (vault *Vault) ToBytes() ([]byte, error) {
 	return file, err
 }
 
-func (emails *EmailsWithDb) save() {
+func (emails *EmailsWithDb) save() error {
 	data, err := emails.Vault.ToBytes()
 	//encData := vault.enc.Encrypt(data)
 	if err != nil {
 		color.Red("Не удалось преобразовать", err.Error())
+		return err
 	}
 	emails.db.Write(data)
+	return nil
 }
