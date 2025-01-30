@@ -6,17 +6,17 @@ import (
 	"go/validation-api/pkg/hash"
 )
 
-type EmailSt struct {
+type Email struct {
 	Email string `json:"email"`
 	Hash  string `json:"hash"`
 }
 
-type Vault struct {
-	Emails []EmailSt `json:"emails"`
+type EmailStore struct {
+	Emails []Email `json:"emails"`
 }
 
-type EmailsWithDb struct {
-	Vault
+type EmailRepository struct {
+	EmailStore
 	db Db
 }
 
@@ -33,43 +33,43 @@ type Db interface {
 	ByteReader
 }
 
-func NewEmail(email string) *EmailSt {
-	return &EmailSt{
+func NewEmail(email string) *Email {
+	return &Email{
 		Email: email,
 		Hash:  hash.GenerateRandomHash(),
 	}
 }
 
-func NewEmailWithDb(db Db) *EmailsWithDb {
+func NewEmailWithDb(db Db) *EmailRepository {
 	file, err := db.Read()
 	if err != nil {
-		return &EmailsWithDb{
-			Vault: Vault{
-				Emails: []EmailSt{},
+		return &EmailRepository{
+			EmailStore: EmailStore{
+				Emails: []Email{},
 			},
 			db: db,
 		}
 	}
-	var emails Vault
+	var emails EmailStore
 	err = json.Unmarshal(file, &emails)
 	if err != nil {
 		color.Red("Не удалось разобрать файл data.json", err.Error())
-		return &EmailsWithDb{
-			Vault: Vault{
-				Emails: []EmailSt{},
+		return &EmailRepository{
+			EmailStore: EmailStore{
+				Emails: []Email{},
 			},
 			db: db,
 		}
 	}
-	return &EmailsWithDb{
-		Vault: emails,
-		db:    db,
+	return &EmailRepository{
+		EmailStore: emails,
+		db:         db,
 	}
 }
 
-func (emails *EmailsWithDb) AddEmail(email EmailSt) error {
+func (emails *EmailRepository) AddEmail(email Email) error {
 	emails.Emails = append(emails.Emails, email)
-	err := emails.save()
+	err := emails.Save()
 	if err != nil {
 		return err
 	}
@@ -77,14 +77,13 @@ func (emails *EmailsWithDb) AddEmail(email EmailSt) error {
 
 }
 
-func (vault *Vault) ToBytes() ([]byte, error) {
+func (vault *EmailStore) ToBytes() ([]byte, error) {
 	file, err := json.Marshal(vault)
 	return file, err
 }
 
-func (emails *EmailsWithDb) save() error {
-	data, err := emails.Vault.ToBytes()
-	//encData := vault.enc.Encrypt(data)
+func (emails *EmailRepository) Save() error {
+	data, err := emails.EmailStore.ToBytes()
 	if err != nil {
 		color.Red("Не удалось преобразовать", err.Error())
 		return err

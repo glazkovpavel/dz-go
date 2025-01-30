@@ -13,7 +13,7 @@ func main() {
 	conf := configs.LoadConfig()
 	router := http.NewServeMux()
 	emailsWithDb := email.NewEmailWithDb(files.NewJsonDb("db/data.json"))
-	verify.NewVerifierHandler(router, verify.VerifierHandlerDeps{Config: conf, EmailsWithDb: emailsWithDb})
+	verify.NewVerifierHandler(router, verify.VerifierHandlerDeps{Config: conf, EmailRepository: emailsWithDb})
 
 	server := http.Server{
 		Addr:    ":8081",

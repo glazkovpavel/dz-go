@@ -8,6 +8,7 @@ import (
 	"go/validation-api/configs"
 	"go/validation-api/internal/email"
 	"go/validation-api/pkg/request"
+	"go/validation-api/pkg/response"
 	"log"
 	"net/http"
 	"net/smtp"
@@ -15,18 +16,18 @@ import (
 
 type VerifierHandlerDeps struct {
 	*configs.Config
-	*email.EmailsWithDb
+	*email.EmailRepository
 }
 
 type VerifierHandler struct {
 	*configs.Config
-	*email.EmailsWithDb
+	*email.EmailRepository
 }
 
 func NewVerifierHandler(router *http.ServeMux, deps VerifierHandlerDeps) {
 	handler := &VerifierHandler{
-		Config:       deps.Config,
-		EmailsWithDb: deps.EmailsWithDb,
+		Config:          deps.Config,
+		EmailRepository: deps.EmailRepository,
 	}
 	router.HandleFunc("POST /send", handler.Send())
 	router.HandleFunc("/send/{hash}", handler.Verify())
@@ -47,7 +48,7 @@ func (handler *VerifierHandler) Send() http.HandlerFunc {
 			color.Red(err.Error())
 			return
 		}
-		err = handler.sendEmail(newEmail.Email)
+		err = handler.sendEmail(newEmail)
 		if err != nil {
 			color.Red(err.Error())
 			return
@@ -58,17 +59,43 @@ func (handler *VerifierHandler) Send() http.HandlerFunc {
 
 func (handler *VerifierHandler) Verify() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-
+		hash := req.PathValue("hash")
+		var emails []email.Email
+		isDeleted := false
+		for _, emailData := range handler.Emails {
+			if emailData.Hash != hash {
+				emails = append(emails, emailData)
+				continue
+			}
+			isDeleted = true
+		}
+		handler.Emails = emails
+		err := handler.EmailRepository.Save()
+		if err != nil {
+			color.Red(err.Error())
+		}
+		data := VerifyResponse{
+			VerificationPassed: isDeleted,
+		}
+		if isDeleted {
+			response.Json(w, data, http.StatusOK)
+			color.Green("Проверка пройдена")
+			return
+		}
+		response.Json(w, data, http.StatusForbidden)
+		color.Red("Проверка не пройдена")
 	}
 }
 
-func (handler *VerifierHandler) sendEmail(userEmail string) error {
+func (handler *VerifierHandler) sendEmail(emailData *email.Email) error {
+	hash := emailData.Hash
+	href := "http://localhost:8081/send/" + hash
 	e := emailPkg.NewEmail()
 	e.From = "glazprom@bk.ru"
-	e.To = []string{userEmail}
-	e.Subject = "Awesome Subject"
+	e.To = []string{emailData.Email}
+	e.Subject = "Подтверждение регистрации"
 	e.Text = []byte("Text Body is, of course, supported!")
-	e.HTML = []byte("<h1>Fancy HTML is supported, too!</h1>")
+	e.HTML = []byte(fmt.Sprintf("<h4>Подтвердите вашу почту, перейдя по ссылке</h4><br><a href=\"%s\">Нажмите сюда</a>", href))
 
 	auth := smtp.PlainAuth(
 		"",
