@@ -9,7 +9,7 @@ type Product struct {
 	gorm.Model
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
-	Image       pq.StringArray `json:"image"`
+	Image       pq.StringArray `json:"image" gorm:"type:text[]"`
 }
 
 func NewProduct(name string, description string, images []string) *Product {
